@@ -1,0 +1,702 @@
+'use client'
+
+import { useState, useRef, useMemo } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import type { Vendor, CategoryWithItems, Item } from '@/types/menu'
+
+interface Props {
+  vendor: Vendor
+  categories: CategoryWithItems[]
+}
+
+export default function BookingClient({ vendor, categories }: Props) {
+  const services = categories.flatMap((c) => c.items.filter((i) => i.is_available))
+  const allItems  = categories.flatMap((c) => c.items)
+
+  const [selectedService, setSelectedService] = useState<Item | null>(null)
+  const [previewItem, setPreviewItem] = useState<Item | null>(null)
+  const [checkIn,  setCheckIn]   = useState('')
+  const [checkOut, setCheckOut]  = useState('')
+  const [guestName,  setGuestName]  = useState('')
+  const [guestPhone, setGuestPhone] = useState('')
+  const [notes, setNotes]           = useState('')
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [submitted, setSubmitted]   = useState(false)
+
+  const supabase = useMemo(() => createClient(), [])
+
+  const nights = useMemo(() => {
+    if (!checkIn || !checkOut) return 0
+    // Use UTC midnight to avoid DST shifting the result by ±1 day
+    const a = new Date(checkIn  + 'T00:00:00Z').getTime()
+    const b = new Date(checkOut + 'T00:00:00Z').getTime()
+    return Math.max(0, Math.round((b - a) / 86400000))
+  }, [checkIn, checkOut])
+
+  const total = selectedService ? selectedService.price * nights : 0
+  const today = new Date().toISOString().split('T')[0]
+
+  const canRequest = !!selectedService && !!checkIn && !!checkOut && nights > 0 && !!guestName.trim()
+
+  const [waBlocked, setWaBlocked] = useState(false)
+  const [waUrl,     setWaUrl]     = useState('')
+
+  const handleRequest = () => {
+    if (!canRequest || !selectedService) return
+    if (!guestName.trim()) return  // guard whitespace-only names
+
+    const lines = [
+      `*Booking Request — ${guestName.trim()}*`,
+      guestPhone.trim() ? `📞 ${guestPhone.trim()}` : '',
+      '',
+      `🏡 *${selectedService.name}*`,
+      `📅 Check-in:  ${checkIn}`,
+      `📅 Check-out: ${checkOut}`,
+      `🌙 ${nights} night${nights !== 1 ? 's' : ''}`,
+      '',
+      `*Total: RM ${total.toFixed(2)}*`,
+      notes.trim() ? `📝 ${notes.trim()}` : '',
+    ].filter(Boolean).join('\n')
+
+    const url = `https://wa.me/${vendor.phone_number}?text=${encodeURIComponent(lines)}`
+    const opened = window.open(url, '_blank')
+
+    if (!opened) {
+      // Browser blocked the popup — show a fallback link instead
+      setWaUrl(url)
+      setWaBlocked(true)
+      return
+    }
+
+    setSubmitted(true)
+    setDrawerOpen(false)
+
+    supabase.from('bookings').insert({
+      vendor_id:      vendor.id,
+      customer_name:  guestName.trim(),
+      customer_phone: guestPhone.trim(),
+      service_name:   selectedService.name,
+      start_date:     checkIn,
+      end_date:       checkOut,
+      notes:          notes.trim() || null,
+      status:         'pending',
+    }).then(({ error }) => {
+      if (error) console.error('Booking insert failed:', error.message)
+    })
+  }
+
+  return (
+    <div className="min-h-screen bg-white">
+      {/* ── Mobile header ─────────────────────────────────── */}
+      <header className="lg:hidden sticky top-0 z-30 bg-white border-b border-border h-14 flex items-center px-4 gap-3">
+        {vendor.logo_url
+          ? <img src={vendor.logo_url} alt={vendor.name} className="w-8 h-8 rounded-full object-cover border border-border shrink-0" />
+          : <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-white font-bold text-xs shrink-0">{(vendor.name?.[0] ?? '?').toUpperCase()}</div>
+        }
+        <p className="font-bold text-ink text-sm flex-1 truncate">{vendor.name}</p>
+        <button
+          onClick={() => setDrawerOpen(true)}
+          className="flex items-center gap-1.5 bg-brand text-white text-xs font-semibold rounded-full px-3 py-1.5 shrink-0"
+        >
+          Book now
+        </button>
+      </header>
+
+      {/* ── Desktop title ──────────────────────────────────── */}
+      <div className="hidden lg:block max-w-7xl mx-auto px-8 pt-10 pb-6">
+        <div className="flex items-center gap-4">
+          {vendor.logo_url && (
+            <img src={vendor.logo_url} alt={vendor.name} className="w-16 h-16 rounded-full object-cover border border-border shrink-0" />
+          )}
+          <div>
+            <h1 className="text-3xl font-bold text-ink">{vendor.name}</h1>
+            <p className="text-sm text-fog mt-0.5">{allItems.length} service{allItems.length !== 1 ? 's' : ''} available</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Hero gallery ───────────────────────────────────── */}
+      <HeroCarousel gallery={vendor.gallery_urls ?? []} vendorName={vendor.name} />
+
+      {/* ── Main layout ────────────────────────────────────── */}
+      <div className="max-w-7xl mx-auto px-4 lg:px-8 py-8 lg:grid lg:grid-cols-[1fr_380px] lg:gap-12 lg:items-start">
+
+        {/* Left: description + service listings */}
+        <div className="pb-40 lg:pb-16 space-y-8">
+          {(vendor.description || vendor.promo_text) && (
+            <div className="pb-8 border-b border-border space-y-4">
+              {vendor.description && (
+                <p className="text-base text-ink leading-relaxed whitespace-pre-line">{vendor.description}</p>
+              )}
+              {vendor.promo_text && (
+                <div className="flex items-start gap-3 bg-brand/5 border border-brand/15 rounded-2xl px-5 py-4">
+                  <span className="text-xl shrink-0">🏷️</span>
+                  <p className="text-sm font-semibold text-ink">{vendor.promo_text}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Service categories */}
+          {categories.map((cat) => (
+            <div key={cat.id}>
+              <h2 className="text-xl font-bold text-ink mb-4">{cat.name}</h2>
+              <div className="space-y-3">
+                {cat.items.map((item) => (
+                  <ServiceCard
+                    key={item.id}
+                    item={item}
+                    selected={selectedService?.id === item.id}
+                    onSelect={() => {
+                      if (!item.is_available) return
+                      setPreviewItem(item)
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Right: desktop booking widget */}
+        <div className="hidden lg:block">
+          <div className="sticky top-6">
+            <BookingWidget
+              vendor={vendor}
+              services={services}
+              selectedService={selectedService}
+              onSelectService={setSelectedService}
+              checkIn={checkIn}
+              checkOut={checkOut}
+              onCheckIn={setCheckIn}
+              onCheckOut={setCheckOut}
+              guestName={guestName}
+              onGuestName={setGuestName}
+              guestPhone={guestPhone}
+              onGuestPhone={setGuestPhone}
+              notes={notes}
+              onNotes={setNotes}
+              nights={nights}
+              total={total}
+              today={today}
+              canRequest={canRequest}
+              onRequest={handleRequest}
+              submitted={submitted}
+              onReset={() => setSubmitted(false)}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Service image preview modal ───────────────────── */}
+      {previewItem && (
+        <ItemPreviewModal
+          item={previewItem}
+          onClose={() => setPreviewItem(null)}
+          onBook={() => {
+            setSelectedService(previewItem)
+            setPreviewItem(null)
+            setDrawerOpen(true)
+          }}
+        />
+      )}
+
+      {/* ── WhatsApp popup-blocked fallback ───────────────── */}
+      {waBlocked && (
+        <div className="fixed inset-x-0 top-16 z-50 px-4">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 flex items-start gap-3 shadow-lg">
+            <span className="text-xl shrink-0">⚠️</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-ink">WhatsApp couldn't open automatically</p>
+              <p className="text-xs text-fog mt-0.5">Your browser blocked the popup. Tap the link below to send your request:</p>
+              <a href={waUrl} target="_blank" rel="noopener noreferrer"
+                onClick={() => { setWaBlocked(false); setSubmitted(true); setDrawerOpen(false) }}
+                className="inline-block mt-2 text-sm font-semibold text-[#25D366] underline underline-offset-2">
+                Open WhatsApp →
+              </a>
+            </div>
+            <button onClick={() => setWaBlocked(false)} className="text-fog hover:text-ink text-lg leading-none shrink-0">×</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Mobile sticky bar (unmounted while drawer open to avoid compositing conflicts) */}
+      {!drawerOpen && (
+        <div className="lg:hidden fixed bottom-0 inset-x-0 z-30 px-4 pb-6 pt-2 bg-white border-t border-border shadow-[0_-2px_12px_rgba(0,0,0,0.08)]">
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className="w-full bg-gradient-to-r from-brand-dark to-brand text-white font-semibold rounded-xl py-3.5 flex items-center justify-between px-5 hover:opacity-90 transition-opacity"
+          >
+            <span className="text-base">Request to Book</span>
+            {selectedService && nights > 0
+              ? <span className="tabular-nums font-bold">RM {total.toFixed(2)}</span>
+              : <span className="text-sm opacity-80">Select dates →</span>
+            }
+          </button>
+        </div>
+      )}
+
+      {/* ── Mobile booking drawer ──────────────────────────── */}
+      {drawerOpen && (
+        <div className="lg:hidden">
+          <div className="fixed inset-0 z-40 bg-black/50" onClick={() => { setDrawerOpen(false); setSubmitted(false) }} />
+          <div className="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-3xl shadow-2xl max-h-[92vh] flex flex-col">
+            <div className="flex justify-center pt-3 pb-1 shrink-0">
+              <div className="w-10 h-1 rounded-full bg-border" />
+            </div>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
+              <h2 className="text-lg font-bold text-ink">Request to Book</h2>
+              <button onClick={() => { setDrawerOpen(false); setSubmitted(false) }}
+                className="w-8 h-8 rounded-full bg-surface flex items-center justify-center text-fog hover:text-ink text-xl leading-none">×</button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-5 py-5">
+              <BookingWidget
+                vendor={vendor}
+                services={services}
+                selectedService={selectedService}
+                onSelectService={setSelectedService}
+                checkIn={checkIn}
+                checkOut={checkOut}
+                onCheckIn={setCheckIn}
+                onCheckOut={setCheckOut}
+                guestName={guestName}
+                onGuestName={setGuestName}
+                guestPhone={guestPhone}
+                onGuestPhone={setGuestPhone}
+                notes={notes}
+                onNotes={setNotes}
+                nights={nights}
+                total={total}
+                today={today}
+                canRequest={canRequest}
+                onRequest={handleRequest}
+                submitted={submitted}
+                onReset={() => setSubmitted(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Service Card ─────────────────────────────────────────────
+
+function ServiceCard({ item, selected, onSelect }: { item: Item; selected: boolean; onSelect: () => void }) {
+  return (
+    <button
+      onClick={onSelect}
+      disabled={!item.is_available}
+      className={`w-full text-left flex items-center gap-4 p-4 rounded-2xl border-2 transition-all ${
+        selected
+          ? 'border-brand bg-brand/5'
+          : item.is_available
+          ? 'border-border hover:border-ink hover:shadow-sm'
+          : 'border-border opacity-50 cursor-not-allowed'
+      }`}
+    >
+      {(item.image_urls?.[0] ?? item.image_url) && (
+        <div className="relative shrink-0">
+          <img src={item.image_urls?.[0] ?? item.image_url!} alt={item.name} className="w-20 h-16 rounded-xl object-cover" />
+          {(item.image_urls?.length ?? 0) > 1 && (
+            <span className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] font-bold px-1 rounded">
+              +{item.image_urls!.length}
+            </span>
+          )}
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-bold text-ink text-sm">{item.name}</p>
+          <p className="font-bold text-ink text-sm tabular-nums shrink-0">RM {item.price.toFixed(2)}<span className="font-normal text-fog text-xs">/night</span></p>
+        </div>
+        {item.description && <p className="text-xs text-fog mt-1 line-clamp-2">{item.description}</p>}
+        {!item.is_available && <p className="text-xs text-brand font-semibold mt-1">Unavailable</p>}
+      </div>
+      {selected && <span className="text-brand shrink-0 text-lg">✓</span>}
+    </button>
+  )
+}
+
+// ─── Item Preview Modal ───────────────────────────────────────
+
+function ItemPreviewModal({ item, onClose, onBook }: { item: Item; onClose: () => void; onBook: () => void }) {
+  const images = [...(item.image_urls ?? []), ...(item.image_url && !item.image_urls?.includes(item.image_url) ? [item.image_url] : [])].filter(Boolean) as string[]
+  const [activeIdx, setActiveIdx] = useState(0)
+  const touchStartX = useRef<number | null>(null)
+  const touchStartY = useRef<number | null>(null)
+
+  const goTo = (i: number) => setActiveIdx(Math.max(0, Math.min(i, images.length - 1)))
+
+  const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
+  }
+  const onTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (touchStartX.current === null) return
+    const dx = touchStartX.current - e.changedTouches[0].clientX
+    const dy = Math.abs((touchStartY.current ?? 0) - e.changedTouches[0].clientY)
+    if (Math.abs(dx) > 40 && Math.abs(dx) > dy) {
+      if (dx > 0) goTo(activeIdx + 1)
+      else goTo(activeIdx - 1)
+    }
+    touchStartX.current = null
+    touchStartY.current = null
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+
+      {/* Sheet */}
+      <div className="relative z-10 w-full lg:max-w-lg bg-white rounded-t-3xl lg:rounded-3xl shadow-2xl max-h-[92vh] flex flex-col overflow-hidden">
+        {/* Drag handle (mobile) */}
+        <div className="flex justify-center pt-3 pb-1 shrink-0 lg:hidden">
+          <div className="w-10 h-1 rounded-full bg-border" />
+        </div>
+
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 z-20 w-8 h-8 rounded-full bg-black/40 flex items-center justify-center text-white text-lg leading-none"
+        >
+          ×
+        </button>
+
+        {/* Image carousel */}
+        {images.length > 0 ? (
+          <div
+            className="relative w-full aspect-[4/3] overflow-hidden shrink-0"
+            style={{ touchAction: 'pan-y' }}
+            onTouchStart={onTouchStart}
+            onTouchEnd={onTouchEnd}
+          >
+            {images.map((url, i) => (
+              <div
+                key={i}
+                className="absolute inset-0 transition-transform duration-300 ease-out"
+                style={{
+                  transform: `translateX(${(i - activeIdx) * 100}%)`,
+                  visibility: i === activeIdx ? 'visible' : 'hidden',
+                  pointerEvents: i === activeIdx ? 'auto' : 'none',
+                }}
+              >
+                <img src={url} alt={item.name} className="w-full h-full object-cover select-none" draggable={false} />
+              </div>
+            ))}
+            {/* Dots */}
+            {images.length > 1 && (
+              <div className="absolute bottom-3 inset-x-0 flex justify-center gap-1.5 pointer-events-none">
+                {images.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => goTo(i)}
+                    className={`rounded-full transition-all duration-200 pointer-events-auto ${i === activeIdx ? 'w-5 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/60'}`}
+                  />
+                ))}
+              </div>
+            )}
+            {/* Counter */}
+            {images.length > 1 && (
+              <div className="absolute top-3 left-3 bg-black/50 text-white text-xs font-semibold px-2 py-1 rounded-full">
+                {activeIdx + 1} / {images.length}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="w-full aspect-[4/3] bg-gradient-to-br from-brand/10 to-brand/5 flex items-center justify-center shrink-0">
+            <p className="text-7xl font-black text-brand/20 select-none">{item.name[0]?.toUpperCase()}</p>
+          </div>
+        )}
+
+        {/* Details */}
+        <div className="overflow-y-auto flex-1 px-5 py-5 space-y-4">
+          <div>
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-xl font-bold text-ink leading-snug">{item.name}</h2>
+              <p className="text-xl font-bold text-ink tabular-nums shrink-0">
+                RM {item.price.toFixed(2)}
+                <span className="text-sm font-normal text-fog">/night</span>
+              </p>
+            </div>
+            {item.description && (
+              <p className="mt-2 text-sm text-fog leading-relaxed whitespace-pre-line">{item.description}</p>
+            )}
+          </div>
+
+          <button
+            onClick={onBook}
+            className="w-full bg-gradient-to-r from-brand-dark to-brand text-white font-semibold rounded-xl py-3.5 text-base hover:opacity-90 transition-opacity"
+          >
+            Select &amp; Book →
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Booking Widget ───────────────────────────────────────────
+
+interface BookingWidgetProps {
+  vendor: Vendor
+  services: Item[]
+  selectedService: Item | null
+  onSelectService: (s: Item) => void
+  checkIn: string
+  checkOut: string
+  onCheckIn: (v: string) => void
+  onCheckOut: (v: string) => void
+  guestName: string
+  onGuestName: (v: string) => void
+  guestPhone: string
+  onGuestPhone: (v: string) => void
+  notes: string
+  onNotes: (v: string) => void
+  nights: number
+  total: number
+  today: string
+  canRequest: boolean
+  onRequest: () => void
+  submitted: boolean
+  onReset: () => void
+}
+
+function BookingWidget({
+  vendor, services, selectedService, onSelectService,
+  checkIn, checkOut, onCheckIn, onCheckOut,
+  guestName, onGuestName, guestPhone, onGuestPhone,
+  notes, onNotes, nights, total, today, canRequest, onRequest, submitted, onReset,
+}: BookingWidgetProps) {
+  if (submitted) {
+    return (
+      <div className="border border-border rounded-2xl p-8 text-center space-y-3">
+        <p className="text-4xl">🎉</p>
+        <p className="font-bold text-ink text-lg">Request sent!</p>
+        <p className="text-sm text-fog">{vendor.name} will confirm your booking via WhatsApp shortly.</p>
+        <button onClick={onReset} className="text-sm font-semibold text-brand underline underline-offset-2 mt-2">
+          Make another request
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="border border-border rounded-2xl overflow-hidden">
+      {/* Price header */}
+      <div className="px-5 pt-5 pb-4 border-b border-border">
+        {selectedService ? (
+          <p className="text-ink">
+            <span className="text-2xl font-bold">RM {selectedService.price.toFixed(2)}</span>
+            <span className="text-fog text-sm"> / night</span>
+          </p>
+        ) : (
+          <p className="text-fog text-sm">Select a service to see pricing</p>
+        )}
+      </div>
+
+      <div className="p-5 space-y-4">
+        {/* Service selector */}
+        <div>
+          <label className="block text-xs font-semibold text-ink mb-1.5">Service / Room</label>
+          <select
+            value={selectedService?.id ?? ''}
+            onChange={(e) => {
+              const s = services.find((i) => i.id === e.target.value)
+              if (s) onSelectService(s)
+            }}
+            className={inputCls}
+          >
+            {services.length === 0 && <option value="">No services available</option>}
+            {services.map((s) => (
+              <option key={s.id} value={s.id}>{s.name} — RM {s.price.toFixed(2)}/night</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Date pickers */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-ink mb-1.5">Check-in</label>
+            <input
+              type="date"
+              value={checkIn}
+              min={today}
+              onChange={(e) => {
+                onCheckIn(e.target.value)
+                if (checkOut && e.target.value >= checkOut) onCheckOut('')
+              }}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-ink mb-1.5">Check-out</label>
+            <input
+              type="date"
+              value={checkOut}
+              min={checkIn || today}
+              onChange={(e) => onCheckOut(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+        </div>
+
+        {/* Same-date error */}
+        {checkIn && checkOut && nights === 0 && (
+          <p className="text-xs text-brand font-semibold -mt-1">Check-out must be after check-in.</p>
+        )}
+
+        {/* Night count */}
+        {nights > 0 && (
+          <div className="bg-surface rounded-xl px-4 py-3 flex justify-between text-sm">
+            <span className="text-fog">{nights} night{nights !== 1 ? 's' : ''}</span>
+            <span className="font-bold text-ink tabular-nums">RM {total.toFixed(2)}</span>
+          </div>
+        )}
+
+        {/* Guest details */}
+        <div className="space-y-3 pt-1">
+          <div>
+            <label className="block text-xs font-semibold text-ink mb-1.5">Your name <span className="text-brand">*</span></label>
+            <input type="text" value={guestName} onChange={(e) => onGuestName(e.target.value)}
+              placeholder="Your full name" className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-ink mb-1.5">Phone number</label>
+            <input type="tel" value={guestPhone} onChange={(e) => onGuestPhone(e.target.value)}
+              placeholder="60123456789 (optional)" className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-ink mb-1.5">Special requests</label>
+            <textarea value={notes} onChange={(e) => onNotes(e.target.value)}
+              placeholder="Early check-in, dietary needs, extra beds…" rows={3}
+              className={`${inputCls} resize-none`} />
+          </div>
+        </div>
+
+        {/* Payment methods */}
+        {vendor.payment_methods?.length > 0 && (
+          <div className="pt-1 space-y-2">
+            <p className="text-xs font-semibold text-ink">Payment</p>
+            <p className="text-xs text-fog">Pay after your booking is confirmed by the host.</p>
+          </div>
+        )}
+
+        {/* CTA */}
+        <button
+          onClick={onRequest}
+          disabled={!canRequest}
+          className="w-full bg-[#25D366] hover:bg-[#1ebe5d] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl py-3.5 flex items-center justify-center gap-2 transition-colors"
+        >
+          <WhatsAppIcon />
+          Request to Book
+        </button>
+
+        <p className="text-center text-xs text-fog">You won't be charged yet — the host will confirm via WhatsApp.</p>
+      </div>
+    </div>
+  )
+}
+
+// ─── Hero Carousel (mobile) + Grid (desktop) ──────────────────
+
+function HeroCarousel({ gallery, vendorName }: { gallery: string[]; vendorName: string }) {
+  const images = gallery.filter(Boolean)
+  const [activeIdx, setActiveIdx] = useState(0)
+  const touchStartX = useRef<number | null>(null)
+  const touchStartY = useRef<number | null>(null)
+
+  const goTo = (i: number) => setActiveIdx(Math.max(0, Math.min(i, images.length - 1)))
+
+  // Touch events instead of Pointer + setPointerCapture.
+  // setPointerCapture on Android Chrome suppresses click events site-wide
+  // until the next paint cycle, making every button on the page unresponsive.
+  const onTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
+  }
+  const onTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (touchStartX.current === null) return
+    const dx = touchStartX.current - e.changedTouches[0].clientX
+    const dy = Math.abs((touchStartY.current ?? 0) - e.changedTouches[0].clientY)
+    if (Math.abs(dx) > 40 && Math.abs(dx) > dy) {
+      if (dx > 0) goTo(activeIdx + 1)
+      else goTo(activeIdx - 1)
+    }
+    touchStartX.current = null
+    touchStartY.current = null
+  }
+
+  if (images.length === 0) {
+    return (
+      <div className="mx-4 lg:max-w-7xl lg:mx-auto lg:px-8 mb-6 lg:mb-8">
+        <div className="h-52 lg:h-[460px] rounded-2xl bg-gradient-to-br from-brand/10 to-brand/5 flex items-center justify-center">
+          <p className="text-9xl font-black text-brand/10 select-none">{vendorName[0]?.toUpperCase()}</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {/* Mobile carousel */}
+      <div className="lg:hidden relative aspect-[4/3] overflow-hidden mb-4"
+        style={{ touchAction: 'pan-y' }}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+      >
+        {images.map((url, i) => (
+          <div key={i} className="absolute inset-0 transition-transform duration-300 ease-out"
+            style={{
+              transform: `translateX(${(i - activeIdx) * 100}%)`,
+              visibility:    i === activeIdx ? 'visible' : 'hidden',
+              pointerEvents: i === activeIdx ? 'auto'    : 'none',
+            }}>
+            <img src={url} alt="" className="w-full h-full object-cover select-none" draggable={false} />
+          </div>
+        ))}
+        {images.length > 1 && (
+          <div className="absolute bottom-3 inset-x-0 flex justify-center items-center gap-1.5 pointer-events-none">
+            {images.map((_, i) => (
+              <button key={i} onClick={() => goTo(i)}
+                className={`rounded-full transition-all duration-200 pointer-events-auto ${i === activeIdx ? 'w-5 h-1.5 bg-white' : 'w-1.5 h-1.5 bg-white/50'}`} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Desktop grid */}
+      <div className="hidden lg:block max-w-7xl mx-auto px-8 mb-8">
+        <div className="rounded-2xl overflow-hidden h-[460px] flex gap-2">
+          <div className={`overflow-hidden ${images.length > 1 ? 'flex-1' : 'w-full'}`}>
+            <img src={images[0]} alt={vendorName} className="w-full h-full object-cover" />
+          </div>
+          {images.length > 1 && (
+            <div className="flex-1 flex flex-col gap-2">
+              <div className="flex gap-2 flex-1 min-h-0">
+                <div className="flex-1 overflow-hidden bg-surface">{images[1] && <img src={images[1]} alt="" className="w-full h-full object-cover" />}</div>
+                <div className="flex-1 overflow-hidden bg-surface">{images[2] && <img src={images[2]} alt="" className="w-full h-full object-cover" />}</div>
+              </div>
+              <div className="flex gap-2 flex-1 min-h-0">
+                <div className="flex-1 overflow-hidden bg-surface">{images[3] && <img src={images[3]} alt="" className="w-full h-full object-cover" />}</div>
+                <div className="flex-1 overflow-hidden bg-surface">{images[4] && <img src={images[4]} alt="" className="w-full h-full object-cover" />}</div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+function WhatsAppIcon() {
+  return (
+    <svg className="w-5 h-5 shrink-0" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+    </svg>
+  )
+}
+
+const inputCls = 'w-full border border-border rounded-xl px-4 py-3 text-sm text-ink placeholder:text-fog focus:outline-none focus:ring-2 focus:ring-ink focus:border-transparent transition bg-white'

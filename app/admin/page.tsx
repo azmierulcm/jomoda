@@ -1,0 +1,41 @@
+import { adminSupabase } from '@/lib/supabase/admin'
+import AdminClient from './AdminClient'
+
+export type VendorStat = {
+  id: string
+  name: string
+  slug: string
+  phone_number: string
+  logo_url: string | null
+  is_active: boolean
+  user_id: string | null
+  created_at: string
+  trial_ends_at: string | null
+  subscription_status: 'trial' | 'active' | 'expired' | null
+  item_count: number
+}
+
+export default async function AdminPage() {
+  const { data, error } = await adminSupabase
+    .from('vendor_stats')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    return (
+      <div className="text-red-600 bg-red-50 rounded-xl p-4 text-sm">
+        Failed to load vendors: {error.message}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="text-xl font-bold text-gray-900">Vendor Management</h1>
+        <p className="text-sm text-gray-500 mt-1">{data?.length ?? 0} registered vendors</p>
+      </div>
+      <AdminClient vendors={(data ?? []) as VendorStat[]} />
+    </div>
+  )
+}
