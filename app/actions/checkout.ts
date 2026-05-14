@@ -2,6 +2,7 @@
 
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
+import { adminSupabase } from '@/lib/supabase/admin'
 
 // ─── Validation schema ────────────────────────────────────────
 
@@ -71,7 +72,22 @@ export async function checkoutToWhatsApp(
     return { success: false, error: 'Order total mismatch. Please refresh and try again.' }
   }
 
-  // 3. Use user-scoped client — RLS ensures vendor is active before insert
+  // 3. Rate limit — max 3 orders per customer per vendor per 60 seconds
+  const windowStart = new Date(Date.now() - 60_000).toISOString()
+  const phone = payload.customer_phone.trim()
+  const rateLimitQuery = adminSupabase
+    .from('orders')
+    .select('id', { count: 'exact', head: true })
+    .eq('vendor_id', payload.vendor_id)
+    .gte('created_at', windowStart)
+  const { count: recentCount } = phone
+    ? await rateLimitQuery.eq('customer_phone', phone)
+    : await rateLimitQuery.eq('customer_name', payload.customer_name.trim())
+  if ((recentCount ?? 0) >= 3) {
+    return { success: false, error: 'Too many orders. Please wait a minute and try again.' }
+  }
+
+  // 4. Use user-scoped client — RLS ensures vendor is active before insert
   const supabase = await createClient()
 
   const short_order_id = makeShortOrderId()
