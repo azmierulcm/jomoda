@@ -20,6 +20,8 @@ export type Vendor = {
   promo_text: string | null
   gallery_urls: string[]
   location_address: string | null
+  location_lat: number | null
+  location_lng: number | null
 }
 
 export type Category = {

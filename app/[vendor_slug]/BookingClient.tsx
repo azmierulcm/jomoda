@@ -137,30 +137,41 @@ export default function BookingClient({ vendor, categories }: Props) {
             </div>
           )}
 
-          {vendor.location_address && (
-            <div className="pb-8 border-b border-border space-y-3">
-              <h2 className="text-base font-semibold text-ink">📍 Location</h2>
-              <p className="text-sm text-fog">{vendor.location_address}</p>
-              <div className="rounded-2xl overflow-hidden border border-border aspect-video w-full">
-                <iframe
-                  title="Property location"
-                  width="100%"
-                  height="100%"
-                  style={{ border: 0 }}
-                  loading="lazy"
-                  src={`https://maps.google.com/maps?q=${encodeURIComponent(vendor.location_address)}&output=embed`}
-                />
+          {(vendor.location_address || (vendor.location_lat && vendor.location_lng)) && (() => {
+            const hasCoords = vendor.location_lat && vendor.location_lng
+            const mapQuery  = hasCoords
+              ? `${vendor.location_lat},${vendor.location_lng}`
+              : encodeURIComponent(vendor.location_address ?? '')
+            const directionsQuery = hasCoords
+              ? `${vendor.location_lat},${vendor.location_lng}`
+              : encodeURIComponent(vendor.location_address ?? '')
+            return (
+              <div className="pb-8 border-b border-border space-y-3">
+                <h2 className="text-base font-semibold text-ink">📍 Location</h2>
+                {vendor.location_address && (
+                  <p className="text-sm text-fog">{vendor.location_address}</p>
+                )}
+                <div className="rounded-2xl overflow-hidden border border-border aspect-video w-full">
+                  <iframe
+                    title="Property location"
+                    width="100%"
+                    height="100%"
+                    style={{ border: 0 }}
+                    loading="lazy"
+                    src={`https://maps.google.com/maps?q=${mapQuery}&output=embed`}
+                  />
+                </div>
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${directionsQuery}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand underline underline-offset-2"
+                >
+                  Get Directions ↗
+                </a>
               </div>
-              <a
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(vendor.location_address)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand underline underline-offset-2"
-              >
-                Get Directions ↗
-              </a>
-            </div>
-          )}
+            )
+          })()}
 
           {/* Service categories */}
           {categories.map((cat) => (

@@ -186,6 +186,8 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
   const [description, setDescription]         = useState(vendor?.description ?? '')
   const [promoText, setPromoText]             = useState(vendor?.promo_text ?? '')
   const [locationAddress, setLocationAddress] = useState(vendor?.location_address ?? '')
+  const [locationLat, setLocationLat]         = useState(vendor?.location_lat?.toString() ?? '')
+  const [locationLng, setLocationLng]         = useState(vendor?.location_lng?.toString() ?? '')
   const [galleryUrls, setGalleryUrls]         = useState<string[]>(vendor?.gallery_urls ?? [])
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoUploadError, setLogoUploadError] = useState<string | null>(null)
@@ -239,6 +241,8 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
       description:   description.trim() || null,
       promo_text:       promoText.trim() || null,
       location_address: businessType === 'booking' ? (locationAddress.trim() || null) : null,
+      location_lat:     businessType === 'booking' ? (locationLat.trim() ? parseFloat(locationLat) : null) : null,
+      location_lng:     businessType === 'booking' ? (locationLng.trim() ? parseFloat(locationLng) : null) : null,
       gallery_urls:     galleryUrls,
       business_type:    businessType,
     }
@@ -307,10 +311,32 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
           </Field>
 
           {businessType === 'booking' && (
-            <Field label="Location / Address" hint="Customers will see a map and a Get Directions link on your page">
+            <Field label="Location / Address" hint="Shown on your public page below the map">
               <textarea value={locationAddress} onChange={(e) => setLocationAddress(e.target.value)}
                 rows={2} placeholder="e.g. Lot 12, Jalan Pantai, 43000 Kajang, Selangor"
                 className={`${inputCls} resize-y`} />
+            </Field>
+          )}
+
+          {businessType === 'booking' && (
+            <Field
+              label="Precise Location (optional)"
+              hint={<>Get coordinates from Google Maps — long-press your property → tap the coordinates. <a href="https://maps.google.com" target="_blank" rel="noopener noreferrer" className="underline text-brand">Open Google Maps ↗</a></>}
+            >
+              <div className="flex gap-3">
+                <input
+                  type="number" step="any" value={locationLat}
+                  onChange={(e) => setLocationLat(e.target.value)}
+                  placeholder="Latitude e.g. 3.1390"
+                  className={`${inputCls} flex-1`}
+                />
+                <input
+                  type="number" step="any" value={locationLng}
+                  onChange={(e) => setLocationLng(e.target.value)}
+                  placeholder="Longitude e.g. 101.6869"
+                  className={`${inputCls} flex-1`}
+                />
+              </div>
             </Field>
           )}
 
