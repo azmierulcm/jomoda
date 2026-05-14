@@ -108,6 +108,8 @@ export default function MenuClient({ vendor, categories }: Props) {
       mDelivery,
       mAddress,
       mNotes,
+      mName,
+      mPhone,
     )
 
     setCart([])
@@ -526,6 +528,8 @@ function DesktopCartPanel({ cart, vendor, onUpdate, onClearCart, totalPrice, sup
       deliveryType,
       address,
       notes,
+      name,
+      phone,
     )
 
     setOrderId(result.short_order_id!)
@@ -808,6 +812,8 @@ function buildWhatsAppUrl(
   deliveryType: DeliveryType,
   address: string,
   notes: string,
+  customerName: string,
+  customerPhone: string,
 ): string {
   // Normalise to E.164-ish without the '+' — expected by wa.me
   const raw = vendorPhone.replace(/\D/g, '')
@@ -816,6 +822,8 @@ function buildWhatsAppUrl(
 
   const lines = [
     `Hello! I would like to confirm my order: ${shortOrderId}.`,
+    `Name: ${customerName.trim()}.`,
+    customerPhone.trim() ? `Phone: ${customerPhone.trim()}.` : '',
     `Total: RM ${totalPrice.toFixed(2)}.`,
     `Items: ${itemSummary}.`,
     deliveryType === 'delivery' ? `Delivery to: ${address.trim()}.` : 'Self pickup.',
