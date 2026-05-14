@@ -69,7 +69,7 @@ export default function HomePage() {
       <section className="py-20 max-w-6xl mx-auto px-5">
         <AnimatedSectionLabel />
         <h2 className="text-3xl sm:text-4xl font-bold text-ink text-center mb-14">
-          Up and running in 3 steps
+          3 Steps and 5 Minutes.
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
