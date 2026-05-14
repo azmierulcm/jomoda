@@ -216,12 +216,14 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
       return
     }
 
-    // Phone is managed in the Settings tab — omit it from this payload
-    // so we never overwrite an existing number with an empty string.
+    // Logo URL: https:// only (blocks javascript: and data: URIs) — already checked above
+    // phone_number is required by DB (NOT NULL) so include current value; format
+    // validation is enforced in Settings tab where the input field lives.
     const payload: Record<string, unknown> = {
       user_id:       userId,
       name:          name.trim(),
       slug:          slug.trim().toLowerCase().replace(/\s+/g, '-'),
+      phone_number:  phone.trim(),
       logo_url:      logoUrl.trim() || null,
       description:   description.trim() || null,
       promo_text:    promoText.trim() || null,
