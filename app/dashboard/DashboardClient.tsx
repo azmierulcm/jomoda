@@ -550,6 +550,13 @@ function ItemsTab({ userId, vendor, categories, items, itemLabel, isBooking, onC
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
 
+  // Sync category_id when categories first load (e.g. after adding the first category)
+  useEffect(() => {
+    if (form.category_id === '' && categories.length > 0) {
+      setForm((prev) => ({ ...prev, category_id: categories[0].id }))
+    }
+  }, [categories])
+
   const resetForm = () => {
     setForm({ ...EMPTY_ITEM, category_id: categories[0]?.id ?? '' })
     setShowForm(false)
@@ -609,6 +616,13 @@ function ItemsTab({ userId, vendor, categories, items, itemLabel, isBooking, onC
     e.preventDefault()
     setBusy(true)
     setSubmitError(null)
+
+    // Guard: category must be selected (can be empty string if categories loaded after mount)
+    if (!form.category_id) {
+      setSubmitError('Please select a category.')
+      setBusy(false)
+      return
+    }
 
     // Reject non-https image URLs (blocks javascript: and data: URIs)
     const rawImageUrl = form.image_url.trim()
