@@ -186,6 +186,8 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
   const [description, setDescription] = useState(vendor?.description ?? '')
   const [promoText, setPromoText]     = useState(vendor?.promo_text ?? '')
   const [galleryUrls, setGalleryUrls] = useState<string[]>(vendor?.gallery_urls ?? [])
+  const [logoUploading, setLogoUploading] = useState(false)
+  const [logoUploadError, setLogoUploadError] = useState<string | null>(null)
   const [saving, setSaving]           = useState(false)
   const [message, setMessage]         = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
@@ -204,19 +206,27 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
   const slugHint = businessType === 'booking' ? 'Your public booking page' : 'Your public menu link'
   const publishLabel = vendor ? 'Save changes' : businessType === 'booking' ? 'Publish my page' : 'Publish my menu'
 
+  const handleLogoUpload = async (file: File) => {
+    if (file.size > 5 * 1024 * 1024) { setLogoUploadError('File too large. Max 5 MB.'); return }
+    setLogoUploading(true)
+    setLogoUploadError(null)
+    const ext  = file.name.split('.').pop() ?? 'jpg'
+    const path = `${userId}/logo_${Date.now()}.${ext}`
+    const { data, error } = await supabase.storage.from('vendor-galleries').upload(path, file, { upsert: true })
+    if (error) {
+      setLogoUploadError(`Upload failed: ${error.message}`)
+    } else if (data) {
+      const { data: urlData } = supabase.storage.from('vendor-galleries').getPublicUrl(data.path)
+      setLogoUrl(urlData.publicUrl)
+    }
+    setLogoUploading(false)
+  }
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
     setMessage(null)
 
-    // Logo URL: https:// only (blocks javascript: and data: URIs)
-    if (logoUrl.trim() && !logoUrl.trim().startsWith('https://')) {
-      setMessage({ type: 'error', text: 'Logo URL must start with https://' })
-      setSaving(false)
-      return
-    }
-
-    // Logo URL: https:// only (blocks javascript: and data: URIs) — already checked above
     // phone_number is required by DB (NOT NULL) so include current value; format
     // validation is enforced in Settings tab where the input field lives.
     const payload: Record<string, unknown> = {
@@ -278,14 +288,14 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
               placeholder="demo-kopitiam" className={inputCls} />
           </Field>
 
-          <Field label="Logo URL" hint="Paste a direct image URL (optional)">
-            <input type="url" value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)}
-              placeholder="https://..." className={inputCls} />
-            {logoUrl && (
-              <div className="mt-2 w-12 h-12 rounded-full overflow-hidden border border-border">
-                <Image src={logoUrl} alt="Logo preview" width={48} height={48} className="object-cover" />
-              </div>
-            )}
+          <Field label="Logo" hint="Shown as your shop icon — square image works best">
+            <LogoUploadField
+              logoUrl={logoUrl}
+              uploading={logoUploading}
+              onUpload={handleLogoUpload}
+              onRemove={() => setLogoUrl('')}
+            />
+            {logoUploadError && <p className="text-xs text-brand mt-1">{logoUploadError}</p>}
           </Field>
 
           <Field label="Description" hint="Shown on your public page">
@@ -1666,6 +1676,43 @@ function ItemImageUpload({ imageUrl, uploading, onUpload, onRemove }: {
           <span className="text-[11px]">PNG, JPG or WEBP</span>
         </button>
       )}
+    </div>
+  )
+}
+
+function LogoUploadField({ logoUrl, uploading, onUpload, onRemove }: {
+  logoUrl: string; uploading: boolean; onUpload: (file: File) => void; onRemove: () => void
+}) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  return (
+    <div className="flex items-center gap-4">
+      <input ref={fileRef} type="file" accept="image/*" className="hidden"
+        onChange={(e) => { if (e.target.files?.[0]) onUpload(e.target.files[0]); e.target.value = '' }} />
+      {logoUrl ? (
+        <div className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-border shrink-0 group">
+          <img src={logoUrl} alt="Logo" className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-full">
+            <button type="button" onClick={() => fileRef.current?.click()}
+              className="text-white text-[10px] font-bold">Change</button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
+          className="w-16 h-16 rounded-full border-2 border-dashed border-border flex flex-col items-center justify-center text-fog hover:border-ink hover:text-ink transition-colors disabled:opacity-50 shrink-0">
+          <span className="text-xl leading-none">{uploading ? '⏳' : '🏪'}</span>
+        </button>
+      )}
+      <div className="space-y-1">
+        <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading}
+          className={btnSmall}>
+          {uploading ? 'Uploading…' : logoUrl ? 'Replace logo' : 'Upload logo'}
+        </button>
+        {logoUrl && (
+          <button type="button" onClick={onRemove}
+            className="block text-xs text-brand underline underline-offset-2">Remove</button>
+        )}
+        <p className="text-xs text-fog">PNG, JPG or WEBP · Max 5 MB</p>
+      </div>
     </div>
   )
 }
