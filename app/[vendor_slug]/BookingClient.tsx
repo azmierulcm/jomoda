@@ -368,7 +368,7 @@ function ItemPreviewModal({ item, onClose, onBook }: { item: Item; onClose: () =
         {/* Image carousel */}
         {images.length > 0 ? (
           <div
-            className="relative w-full aspect-[4/3] overflow-hidden shrink-0"
+            className="relative w-full aspect-[4/3] overflow-hidden shrink-0 group"
             style={{ touchAction: 'pan-y' }}
             onTouchStart={onTouchStart}
             onTouchEnd={onTouchEnd}
@@ -386,6 +386,29 @@ function ItemPreviewModal({ item, onClose, onBook }: { item: Item; onClose: () =
                 <img src={url} alt={item.name} className="w-full h-full object-cover select-none" draggable={false} />
               </div>
             ))}
+
+            {/* Click zones — left half prev, right half next */}
+            {images.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => goTo(activeIdx - 1)}
+                  className="absolute inset-y-0 left-0 w-1/2 z-10 flex items-center justify-start pl-3 opacity-0 group-hover:opacity-100 transition-opacity"
+                  aria-label="Previous photo"
+                >
+                  <span className="w-8 h-8 rounded-full bg-black/40 flex items-center justify-center text-white text-lg leading-none">‹</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => goTo(activeIdx + 1)}
+                  className="absolute inset-y-0 right-0 w-1/2 z-10 flex items-center justify-end pr-3 opacity-0 group-hover:opacity-100 transition-opacity"
+                  aria-label="Next photo"
+                >
+                  <span className="w-8 h-8 rounded-full bg-black/40 flex items-center justify-center text-white text-lg leading-none">›</span>
+                </button>
+              </>
+            )}
+
             {/* Dots */}
             {images.length > 1 && (
               <div className="absolute bottom-3 inset-x-0 flex justify-center gap-1.5 pointer-events-none">
