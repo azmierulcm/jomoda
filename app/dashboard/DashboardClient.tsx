@@ -209,14 +209,6 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
     setSaving(true)
     setMessage(null)
 
-    // Phone: digits only, 8–15 chars (covers Malaysian 60xxxxxxxxx format)
-    const digitsOnly = phone.replace(/\D/g, '')
-    if (digitsOnly.length < 8 || digitsOnly.length > 15) {
-      setMessage({ type: 'error', text: 'Phone number must be 8–15 digits, e.g. 60123456789.' })
-      setSaving(false)
-      return
-    }
-
     // Logo URL: https:// only (blocks javascript: and data: URIs)
     if (logoUrl.trim() && !logoUrl.trim().startsWith('https://')) {
       setMessage({ type: 'error', text: 'Logo URL must start with https://' })
@@ -224,11 +216,12 @@ function ProfileTab({ userId, vendor, businessType, onSaved, supabase }: {
       return
     }
 
-    const payload = {
+    // Phone is managed in the Settings tab — omit it from this payload
+    // so we never overwrite an existing number with an empty string.
+    const payload: Record<string, unknown> = {
       user_id:       userId,
       name:          name.trim(),
       slug:          slug.trim().toLowerCase().replace(/\s+/g, '-'),
-      phone_number:  digitsOnly,
       logo_url:      logoUrl.trim() || null,
       description:   description.trim() || null,
       promo_text:    promoText.trim() || null,
