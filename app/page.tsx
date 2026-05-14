@@ -152,7 +152,7 @@ export default function HomePage() {
                 <p className="text-xs font-bold text-red-500 text-center">Every 3rd order you fulfill<br/>goes to the platform, not you.</p>
               </div>
               <p className="text-sm text-fog leading-relaxed">
-                Grab, Foodpanda, and the rest charge <span className="font-semibold text-red-500">up to 30% per order</span>. You do the cooking, they take the cut. Why work for them?
+                Third-party delivery apps charge <span className="font-semibold text-red-500">up to 30% per order</span>. You do the cooking, they take the cream. Why work for a middleman?
               </p>
             </div>
 
