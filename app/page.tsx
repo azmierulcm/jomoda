@@ -2,6 +2,7 @@ import Link from 'next/link'
 import AnimatedPlatform from './components/AnimatedPlatform'
 import DemoPickerButton from './components/DemoPickerButton'
 import ComparisonSlider from './components/ComparisonSlider'
+import AnimatedSectionLabel from './components/AnimatedSectionLabel'
 
 export default function HomePage() {
   return (
@@ -66,7 +67,7 @@ export default function HomePage() {
 
       {/* ── How It Works ─────────────────────────────────────── */}
       <section className="py-20 max-w-6xl mx-auto px-5">
-        <p className="text-center text-xs font-bold uppercase tracking-widest text-fog mb-3">Simple by design</p>
+        <AnimatedSectionLabel />
         <h2 className="text-3xl sm:text-4xl font-bold text-ink text-center mb-14">
           Up and running in 3 steps
         </h2>
