@@ -280,8 +280,8 @@ export default function HomePage() {
           <div className="flex items-center gap-6 text-xs text-fog">
             <Link href="/login" className="hover:text-ink transition-colors">Login</Link>
             <a href="mailto:hello@jomoda.com" className="hover:text-ink transition-colors">Contact</a>
-            <a href="#" className="hover:text-ink transition-colors">Terms</a>
-            <a href="#" className="hover:text-ink transition-colors">Privacy</a>
+            <Link href="/terms" className="hover:text-ink transition-colors">Terms</Link>
+            <Link href="/privacy" className="hover:text-ink transition-colors">Privacy</Link>
           </div>
           <p className="text-xs text-fog">© {new Date().getFullYear()} Jomoda. All rights reserved.</p>
         </div>

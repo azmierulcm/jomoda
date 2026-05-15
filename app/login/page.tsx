@@ -208,8 +208,8 @@ function AuthForm() {
           {mode === 'signup' && (
             <p className="text-xs text-fog text-center mt-4 leading-relaxed">
               By creating an account you agree to our{' '}
-              <a href="#" className="underline hover:text-ink">Terms</a> and{' '}
-              <a href="#" className="underline hover:text-ink">Privacy Policy</a>.
+              <a href="/terms" className="underline hover:text-ink">Terms</a> and{' '}
+              <a href="/privacy" className="underline hover:text-ink">Privacy Policy</a>.
             </p>
           )}
         </div>
